@@ -27,6 +27,7 @@
   .pasta button{all:unset;cursor:pointer;-webkit-tap-highlight-color:transparent;width:110px;max-width:100%;transition:width .45s cubic-bezier(.34,1.56,.64,1)}
   .pasta button:active{transform:scale(.96)}
   .pasta img{display:block;width:100%;height:auto}
+  .oops{all:unset;cursor:pointer;display:none;margin-top:24px;font-size:15px;line-height:1.3;text-decoration:underline;text-underline-offset:3px;opacity:.85}
   .pasta p{margin:0;font-size:20px;line-height:1.3;max-width:11em}
 </style>
 </head>
@@ -42,6 +43,7 @@
     </div>
   </div>
   <p class="love">→ <a href="https://www.google.com/maps/search/?api=1&amp;query=211+W+30th+St+Richmond+VA+23225" target="_blank" rel="noopener">211 W. 30th</a><br>Pasta provided, BYOB.<br><br>Love,<br>J, K, M &amp; D</p>
+  <button class="oops" id="oops">Oops, I tapped the pasta but we’re actually not coming.</button>
 </main>
 <script>
   // 👉 CHANGE THIS EACH WEEK: true = happening (green), false = not happening (red)
@@ -54,15 +56,30 @@
   document.getElementById('status').innerHTML = IS_ON ? 'HAPPENING' : 'NOT<br>HAPPENING';
 
   // Pasta counter: the bowl grows 10% for every tap this week (shared by everyone)
-  const pasta = document.getElementById('pasta'), bowl = document.getElementById('bowl');
+  const pasta = document.getElementById('pasta'), bowl = document.getElementById('bowl'), oops = document.getElementById('oops');
   let count = 0;
   const size = () => bowl.style.width = (110 * (1 + 0.10 * count)) + 'px';
+
+  // Remember how many times THIS phone tapped this week, so "Oops" can take them back
+  const wk = new Date(); wk.setDate(wk.getDate() + ((3 - wk.getDay() + 7) % 7));
+  const week = wk.toDateString();
+  let mine = 0;
+  try { const m = JSON.parse(localStorage.getItem('wiw-taps') || '{}'); if (m.week === week) mine = m.n || 0; } catch (e) {}
+  const saveMine = () => { try { localStorage.setItem('wiw-taps', JSON.stringify({ week, n: mine })); } catch (e) {} oops.style.display = mine > 0 ? 'block' : 'none'; };
+
   if (!IS_ON) pasta.style.display = 'none';
   else {
+    saveMine();
     fetch('/api/pasta').then(r => r.json()).then(d => { count = d.count || 0; size(); }).catch(() => {});
     bowl.addEventListener('click', () => {
-      count++; size();
+      count++; mine++; size(); saveMine();
       fetch('/api/pasta', { method: 'POST' }).then(r => r.json()).then(d => { if (d.count >= count) { count = d.count; size(); } }).catch(() => {});
+    });
+    oops.addEventListener('click', () => {
+      const n = mine; if (!n) return;
+      count = Math.max(0, count - n); mine = 0; size(); saveMine();
+      fetch('/api/pasta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ undo: n }) })
+        .then(r => r.json()).then(d => { if (typeof d.count === 'number') { count = d.count; size(); } }).catch(() => {});
     });
   }
 
