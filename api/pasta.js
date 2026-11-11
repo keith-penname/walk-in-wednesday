@@ -24,6 +24,15 @@ module.exports = async (req, res) => {
   const key = weekKey();
   try {
     if (req.method === 'POST') {
+      let body = req.body || {};
+      if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      const undo = Math.max(0, Math.min(1000, parseInt(body.undo, 10) || 0));
+      if (undo) {
+        const out = await redis([['DECRBY', key, undo]]);
+        let count = Number(out[0].result) || 0;
+        if (count < 0) { await redis([['SET', key, 0, 'EX', 864000]]); count = 0; }
+        return res.status(200).json({ count });
+      }
       const out = await redis([['INCR', key], ['EXPIRE', key, 864000]]);
       return res.status(200).json({ count: Number(out[0].result) || 0 });
     }
